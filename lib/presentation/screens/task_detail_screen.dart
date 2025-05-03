@@ -308,42 +308,37 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
   
   // Build map widget to display task location
   Widget _buildMap() {
-    return FlutterMap(
-      options: MapOptions(
-        center: _task!.location,
-        zoom: 14.0,
-      ),
-      children: [
-        TileLayer(
-          urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-          subdomains: const ['a', 'b', 'c'],
+    return SizedBox(
+      height: 300,
+      child: FlutterMap(
+        options: MapOptions(
+          center: _task!.location,
+          zoom: 15,
+          interactiveFlags: InteractiveFlag.none,
         ),
-        MarkerLayer(
-          markers: [
-            Marker(
-              point: _task!.location,
-              width: 80,
-              height: 80,
-              builder: (context) => const Icon(
-                Icons.location_pin,
-                color: Colors.red,
-                size: 40,
+        children: [
+          TileLayer(
+            urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+            subdomains: const ['a', 'b', 'c'],
+            errorTileCallback: (tile, error) {
+              print('Error loading map tile: $error');
+              // Optionally show a fallback tile or error message
+            },
+          ),
+          MarkerLayer(
+            markers: [
+              Marker(
+                point: _task!.location,
+                builder: (ctx) => const Icon(
+                  Icons.location_on,
+                  color: Colors.red,
+                  size: 40,
+                ),
               ),
-            ),
-          ],
-        ),
-        CircleLayer(
-          circles: [
-            CircleMarker(
-              point: _task!.location,
-              radius: _task!.proximityRadius,
-              color: Colors.blue.withOpacity(0.3),
-              borderColor: Colors.blue,
-              borderStrokeWidth: 2,
-            ),
-          ],
-        ),
-      ],
+            ],
+          ),
+        ],
+      ),
     );
   }
   

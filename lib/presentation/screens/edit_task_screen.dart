@@ -349,48 +349,48 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
   
   // Build map widget for location selection
   Widget _buildMap() {
-    return FlutterMap(
-      mapController: _mapController,
-      options: MapOptions(
-        center: _location,
-        zoom: 14.0,
-        onTap: (tapPosition, point) {
-          setState(() {
-            _location = point;
-          });
-        },
-      ),
-      children: [
-        TileLayer(
-          urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-          subdomains: const ['a', 'b', 'c'],
+    return SizedBox(
+      height: 300,
+      child: FlutterMap(
+        options: MapOptions(
+          center: _location,
+          zoom: 15,
+          onTap: (_, point) => _updateLocation(point),
         ),
-        MarkerLayer(
-          markers: [
-            Marker(
-              point: _location,
-              width: 80,
-              height: 80,
-              builder: (context) => const Icon(
-                Icons.location_pin,
-                color: Colors.red,
-                size: 40,
+        children: [
+          TileLayer(
+            urlTemplate: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+            subdomains: const ['a', 'b', 'c'],
+            errorTileCallback: (tile, error) {
+              print('Error loading map tile: $error');
+              // Optionally show a fallback tile or error message
+            },
+          ),
+          MarkerLayer(
+            markers: [
+              Marker(
+                point: _location,
+                builder: (ctx) => const Icon(
+                  Icons.location_on,
+                  color: Colors.red,
+                  size: 40,
+                ),
               ),
-            ),
-          ],
-        ),
-        CircleLayer(
-          circles: [
-            CircleMarker(
-              point: _location,
-              radius: _proximityRadius,
-              color: Colors.blue.withOpacity(0.3),
-              borderColor: Colors.blue,
-              borderStrokeWidth: 2,
-            ),
-          ],
-        ),
-      ],
+            ],
+          ),
+          CircleLayer(
+            circles: [
+              CircleMarker(
+                point: _location,
+                radius: _proximityRadius,
+                color: Colors.blue.withOpacity(0.3),
+                borderColor: Colors.blue,
+                borderStrokeWidth: 2,
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
   

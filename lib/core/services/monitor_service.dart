@@ -35,6 +35,10 @@ class MonitorService {
   // Set of already notified task IDs to prevent duplicate notifications
   Set<String> _notifiedTaskIds = {};
   
+  // Add these fields
+  Timer? _recoveryTimer;
+  static const _recoveryInterval = Duration(minutes: 5);
+  
   // Initialize the service
   Future<void> initialize() async {
     if (_isInitialized) return;
@@ -52,6 +56,9 @@ class MonitorService {
     
     // Load notified task IDs from SharedPreferences
     await _loadNotifiedTaskIds();
+    
+    // Start recovery mechanism
+    await _startRecoveryMechanism();
     
     _isInitialized = true;
   }
@@ -219,5 +226,39 @@ class MonitorService {
     // Remove from notified tasks if present
     _notifiedTaskIds.remove(id);
     await _saveNotifiedTaskIds(_notifiedTaskIds);
+  }
+
+  // Add this method
+  Future<void> _startRecoveryMechanism() async {
+    _recoveryTimer?.cancel();
+    _recoveryTimer = Timer.periodic(_recoveryInterval, (_) async {
+      try {
+        final isRunning = await _backgroundService.isRunning();
+        if (!isRunning) {
+          print('Background service not running, attempting to restart...');
+          await startService();
+          
+          // Verify service is running
+          final isNowRunning = await _backgroundService.isRunning();
+          if (!isNowRunning) {
+            // If still not running, show notification
+            await _notificationService.showServiceStatusNotification(
+              'Service Restart Required',
+              'The background service needs to be restarted to continue monitoring tasks.',
+            );
+          }
+        }
+      } catch (e) {
+        print('Error in recovery mechanism: $e');
+      }
+    });
+  }
+
+  // Update dispose method
+  @override
+  void dispose() {
+    _recoveryTimer?.cancel();
+    _backgroundService.stopService();
+    super.dispose();
   }
 }

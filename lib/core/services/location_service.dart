@@ -9,7 +9,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../domain/entities/task.dart';
-import '../../services/notification_service.dart';
+import 'notification_service.dart';
 
 class LocationService {
   static const String _isolateName = 'locationIsolate';
