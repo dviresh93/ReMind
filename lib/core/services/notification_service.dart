@@ -1,9 +1,11 @@
 // lib/core/services/notification_service.dart
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:rxdart/rxdart.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../domain/entities/task.dart';
 
@@ -21,29 +23,79 @@ class NotificationService {
   
   Stream<String?> get selectNotificationStream => _selectNotificationSubject.stream;
 
-  Future<void> initialize() async {
-    // Initialize native notification plugin
-    const AndroidInitializationSettings initializationSettingsAndroid =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+  bool _isInitialized = false;
+
+  Future<bool> requestNotificationPermissions() async {
+    // For iOS, permissions are requested during initialization
+    if (Platform.isIOS) {
+      return true; // Permissions handled by DarwinInitializationSettings
+    }
+    
+    // For Android 13+ (API level 33+)
+    if (Platform.isAndroid) {
+      // Check if we can request runtime permissions (Android 13+)
+      final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+      final androidImplementation = flutterLocalNotificationsPlugin
+          .resolvePlatformSpecificImplementation
+              AndroidFlutterLocalNotificationsPlugin>();
+              
+      if (androidImplementation != null) {
+        final arePermissionsGranted = await androidImplementation.arePermissionsGranted();
         
-    const DarwinInitializationSettings initializationSettingsIOS =
-        DarwinInitializationSettings(
+        if (!arePermissionsGranted) {
+          final permissionGranted = await androidImplementation.requestPermission();
+          return permissionGranted ?? false;
+        }
+        
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
+  Future<void> initialize() async {
+    if (_isInitialized) return;
+    
+    // Initialize FlutterLocalNotificationsPlugin
+    final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+    
+    // Android initialization
+    const androidInitializationSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
+    
+    // iOS initialization
+    const darwinInitializationSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
       requestSoundPermission: true,
     );
     
-    const InitializationSettings initializationSettings = InitializationSettings(
-      android: initializationSettingsAndroid,
-      iOS: initializationSettingsIOS,
+    // Initialize settings
+    final initializationSettings = InitializationSettings(
+      android: androidInitializationSettings,
+      iOS: darwinInitializationSettings,
     );
     
-    await _flutterLocalNotificationsPlugin.initialize(
+    // Initialize the plugin
+    await flutterLocalNotificationsPlugin.initialize(
       initializationSettings,
-      onDidReceiveNotificationResponse: (NotificationResponse response) {
-        _selectNotificationSubject.add(response.payload);
-      },
+      onDidReceiveNotificationResponse: _onNotificationTapped,
     );
+    
+    // Request permissions
+    final hasPermission = await requestNotificationPermissions();
+    
+    if (!hasPermission) {
+      print('Notification permissions not granted');
+      // Store this state so the app can show appropriate UI
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('notification_permission_granted', false);
+    } else {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('notification_permission_granted', true);
+    }
+    
+    _isInitialized = true;
   }
   
   // Define notification channels

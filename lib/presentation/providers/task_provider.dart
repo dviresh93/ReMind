@@ -2,6 +2,7 @@
 
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 
 import '../../domain/entities/task.dart';
 import '../../domain/repositories/task_repository.dart';
@@ -10,6 +11,7 @@ import '../../core/services/monitor_service.dart';
 class TaskProvider with ChangeNotifier {
   final TaskRepository _taskRepository;
   final MonitorService _monitorService;
+  late final _AppLifecycleObserver _lifecycleObserver;
   
   List<Task> _allTasks = [];
   List<Task> _activeTasks = [];
@@ -32,10 +34,43 @@ class TaskProvider with ChangeNotifier {
     // Initially load tasks
     refreshTasks();
     
-    // Set up a periodic refresh
-    Timer.periodic(const Duration(minutes: 1), (_) {
-      refreshTasks();
+    // Set up a periodic refresh that accounts for app state
+    const refreshInterval = Duration(minutes: 1);
+    Timer.periodic(refreshInterval, (timer) async {
+      // Only refresh when app is in foreground
+      final isInForeground = WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
+      if (isInForeground) {
+        await refreshTasks();
+      }
     });
+    
+    // Also listen for app lifecycle changes
+    _lifecycleObserver = _AppLifecycleObserver(
+      onResume: () => refreshTasks(),
+    );
+    WidgetsBinding.instance.addObserver(_lifecycleObserver);
+  }
+  
+  // Add this class to listen for lifecycle changes
+  class _AppLifecycleObserver extends WidgetsBindingObserver {
+    final VoidCallback onResume;
+    
+    _AppLifecycleObserver({required this.onResume});
+    
+    @override
+    void didChangeAppLifecycleState(AppLifecycleState state) {
+      if (state == AppLifecycleState.resumed) {
+        onResume();
+      }
+    }
+  }
+  
+  // Don't forget to dispose in the provider
+  @override
+  void dispose() {
+    // Remove the observer when provider is disposed
+    WidgetsBinding.instance.removeObserver(_lifecycleObserver);
+    super.dispose();
   }
   
   // Refresh tasks from repository

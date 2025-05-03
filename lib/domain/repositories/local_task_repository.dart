@@ -80,17 +80,37 @@ class LocalTaskRepository implements TaskRepository {
 
   @override
   Future<void> addTask(Task task) async {
-    // If no ID is provided, generate one
-    final taskToSave = task.id.isEmpty 
-        ? task.copyWith(id: const Uuid().v4()) 
-        : task;
-    
-    await _taskBox.put(taskToSave.id, taskToSave.toMap());
+    try {
+      // Validate task
+      if (task.id.isEmpty) {
+        throw ArgumentError('Task ID cannot be empty');
+      }
+      
+      // If no ID is provided, generate one
+      final taskToSave = task.id.isEmpty 
+          ? task.copyWith(id: const Uuid().v4()) 
+          : task;
+      
+      await _taskBox.put(taskToSave.id, taskToSave.toMap());
+    } catch (e) {
+      print('Error adding task: $e');
+      throw Exception('Failed to save task: $e');
+    }
   }
 
   @override
   Future<void> updateTask(Task task) async {
-    await _taskBox.put(task.id, task.toMap());
+    try {
+      // Verify task exists before updating
+      if (!_taskBox.containsKey(task.id)) {
+        throw Exception('Task not found with ID: ${task.id}');
+      }
+      
+      await _taskBox.put(task.id, task.toMap());
+    } catch (e) {
+      print('Error updating task: $e');
+      throw Exception('Failed to update task: $e');
+    }
   }
 
   @override

@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
+import 'dart:async';
+import 'dart:io';
 
 // Add a geocoding API key if using Google/other paid services
 // const String _apiKey = 'YOUR_API_KEY';
@@ -27,7 +29,9 @@ class LocationHelper {
         headers: {
           'User-Agent': 'ReMind App', // Required by Nominatim's usage policy
         },
-      );
+      ).timeout(const Duration(seconds: 10), onTimeout: () {
+        throw TimeoutException('Geocoding request timed out');
+      });
       
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -37,9 +41,16 @@ class LocationHelper {
         } else {
           return 'Unknown location';
         }
+      } else if (response.statusCode == 429) {
+        // Rate limit exceeded
+        return 'Service temporarily unavailable (rate limit)';
       } else {
-        return 'Error fetching address';
+        return 'Error fetching address: Status ${response.statusCode}';
       }
+    } on TimeoutException {
+      return 'Request timed out';
+    } on SocketException {
+      return 'Network connection issue';
     } catch (e) {
       return 'Error: $e';
     }

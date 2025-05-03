@@ -9,6 +9,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../domain/entities/task.dart';
+import '../../services/notification_service.dart';
 
 class LocationService {
   static const String _isolateName = 'locationIsolate';
@@ -30,8 +31,25 @@ class LocationService {
   // Haversine formula calculator
   final Distance _distance = const Distance();
   
+  // Notification service
+  late NotificationService _notificationService;
+  
+  // Add this property to track initialization status
+  bool _isInitialized = false;
+  
   // Initialize the location service
   Future<void> initialize() async {
+    if (_isInitialized) return;
+    
+    // Initialize dependencies
+    _notificationService = NotificationService();
+    await _notificationService.initialize();
+    
+    // Start periodic permission checks
+    Timer.periodic(const Duration(minutes: 15), (_) {
+      verifyLocationPermissions();
+    });
+    
     // Check if location services are enabled
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
@@ -54,6 +72,8 @@ class LocationService {
     
     // Start location tracking
     await _startLocationTracking();
+    
+    _isInitialized = true;
   }
 
   // Start tracking location in the background
@@ -151,5 +171,32 @@ class LocationService {
     
     // Close the receive port
     _receivePort?.close();
+  }
+
+  // Add this method to periodically check permissions
+  Future<void> verifyLocationPermissions() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        // Notify about disabled location services
+        _notificationService.showServiceStatusNotification(
+          'Location services disabled',
+          'Please enable location services for ReMind to work properly'
+        );
+        return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied || 
+          permission == LocationPermission.deniedForever) {
+        // Permissions have been revoked, update app state
+        _notificationService.showServiceStatusNotification(
+          'Location permission required',
+          'ReMind needs location permission to remind you about nearby tasks'
+        );
+      }
+    } catch (e) {
+      print('Error verifying location permissions: $e');
+    }
   }
 }

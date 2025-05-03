@@ -174,4 +174,29 @@ class MonitorService {
   // Get notified task IDs (static for background service)
   static Future<Set<String>> _getNotifiedTaskIds() async {
     final prefs = await SharedPreferences.getInstance();
-    final notifiedIds = prefs
+    final notifiedIds = prefs.getStringList('notified_task_ids') ?? [];
+    return Set<String>.from(notifiedIds);
+  }
+  
+  // Save notified task IDs
+  static Future<void> _saveNotifiedTaskIds(Set<String> notifiedIds) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('notified_task_ids', notifiedIds.toList());
+  }
+
+  Future<void> stopService() async {
+    if (!_isInitialized) return;
+    
+    // Stop the service properly
+    await _backgroundService.invoke('stopService');
+    
+    // Clean up resources
+    _locationService.dispose();
+    _notificationService.dispose();
+    
+    // Clear notification UI
+    await _notificationService.cancelAllNotifications();
+    
+    _isInitialized = false;
+  }
+}

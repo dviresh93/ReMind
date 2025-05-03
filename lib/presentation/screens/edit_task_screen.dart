@@ -108,9 +108,16 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
   
   @override
   void dispose() {
+    // Properly dispose controllers
     _nameController.dispose();
     _descriptionController.dispose();
     _locationNameController.dispose();
+    
+    // Also dispose the map controller
+    if (_mapController is Disposable) {
+      (_mapController as Disposable).dispose();
+    }
+    
     super.dispose();
   }
 
@@ -466,9 +473,20 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
   // Save task
   void _saveTask() {
     if (_formKey.currentState!.validate()) {
-      // Combine date and time
+      // Validate dates more thoroughly
+      final now = DateTime.now();
       final startDateTime = _combineDateTime(_startDate, _startTime);
       final endDateTime = _combineDateTime(_endDate, _endTime);
+      
+      // Check if start time is in the past for new tasks
+      if (widget.task == null && startDateTime.isBefore(now)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Start time cannot be in the past for new tasks'),
+          ),
+        );
+        return;
+      }
       
       // Check if end time is after start time
       if (endDateTime.isBefore(startDateTime)) {
@@ -480,40 +498,65 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
         return;
       }
       
+      // Validate proximity radius
+      if (_proximityRadius < 50 || _proximityRadius > 500) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Proximity radius must be between 50 and 500 meters'),
+          ),
+        );
+        return;
+      }
+      
       // Create or update task
       final Task task = widget.task == null
           ? Task(
               id: const Uuid().v4(),
-              name: _nameController.text,
-              description: _descriptionController.text,
+              name: _nameController.text.trim(),
+              description: _descriptionController.text.trim(),
               location: _location,
-              locationName: _locationNameController.text,
+              locationName: _locationNameController.text.trim(),
               proximityRadius: _proximityRadius,
               startTime: startDateTime,
               endTime: endDateTime,
             )
           : widget.task!.copyWith(
-              name: _nameController.text,
-              description: _descriptionController.text,
+              name: _nameController.text.trim(),
+              description: _descriptionController.text.trim(),
               location: _location,
-              locationName: _locationNameController.text,
+              locationName: _locationNameController.text.trim(),
               proximityRadius: _proximityRadius,
               startTime: startDateTime,
               endTime: endDateTime,
             );
       
-      // Save to repository
+      // Show loading indicator
+      setState(() {
+        _isLoading = true;
+      });
+      
+      // Save to repository with error handling
       final taskProvider = Provider.of<TaskProvider>(context, listen: false);
       
+      Future<void> saveOperation;
       if (widget.task == null) {
-        taskProvider.addTask(task).then((_) {
-          Navigator.pop(context);
-        });
+        saveOperation = taskProvider.addTask(task);
       } else {
-        taskProvider.updateTask(task).then((_) {
-          Navigator.pop(context);
-        });
+        saveOperation = taskProvider.updateTask(task);
       }
+      
+      saveOperation.then((_) {
+        Navigator.pop(context);
+      }).catchError((error) {
+        setState(() {
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to save task: $error'),
+          ),
+        );
+      });
     }
   }
 }
