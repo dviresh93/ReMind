@@ -81,12 +81,6 @@ class LocalTaskRepository implements TaskRepository {
   @override
   Future<void> addTask(Task task) async {
     try {
-      // Validate task
-      if (task.id.isEmpty) {
-        throw ArgumentError('Task ID cannot be empty');
-      }
-      
-      // If no ID is provided, generate one
       final taskToSave = task.id.isEmpty 
           ? task.copyWith(id: const Uuid().v4()) 
           : task;
