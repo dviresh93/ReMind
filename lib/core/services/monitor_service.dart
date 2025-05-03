@@ -199,4 +199,25 @@ class MonitorService {
     
     _isInitialized = false;
   }
+
+  Future<void> startService() async {
+    if (!_isInitialized) {
+      await initialize();
+    }
+    await _backgroundService.startService();
+  }
+
+  Future<void> markTaskAsCompleted(String id) async {
+    await _taskRepository.completeTask(id);
+    // Remove from notified tasks if present
+    _notifiedTaskIds.remove(id);
+    await _saveNotifiedTaskIds(_notifiedTaskIds);
+  }
+
+  Future<void> snoozeTask(String id, {Duration timeout = const Duration(hours: 1)}) async {
+    await _taskRepository.snoozeTask(id, timeout: timeout);
+    // Remove from notified tasks if present
+    _notifiedTaskIds.remove(id);
+    await _saveNotifiedTaskIds(_notifiedTaskIds);
+  }
 }

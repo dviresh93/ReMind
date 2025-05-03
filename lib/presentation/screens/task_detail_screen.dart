@@ -362,22 +362,17 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
             ),
-            onPressed: () {
-              // Show delete confirmation dialog
-              _showDeleteConfirmationDialog(context);
-            },
+            onPressed: () => _showDeleteConfirmationDialog(context),
           ),
           ElevatedButton.icon(
             icon: const Icon(Icons.restore),
             label: const Text('Restore'),
             onPressed: () {
-              // Update task status to pending
               final updatedTask = _task!.copyWith(
                 status: TaskStatus.pending,
                 lastReminded: null,
                 snoozedUntil: null,
               );
-              
               taskProvider.updateTask(updatedTask).then((_) {
                 Navigator.pop(context);
               });
@@ -385,35 +380,32 @@ class _TaskDetailScreenState extends State<TaskDetailScreen> {
           ),
         ],
       );
-    } else {
-      return Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          ElevatedButton.icon(
-            icon: const Icon(Icons.check_circle),
-            label: const Text('Mark Done'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () {
-              taskProvider.completeTask(_task!.id).then((_) {
-                Navigator.pop(context);
-              });
-            },
-          ),
-          if (_task!.status != TaskStatus.snoozed)
-            ElevatedButton.icon(
-              icon: const Icon(Icons.snooze),
-              label: const Text('Snooze'),
-              onPressed: () {
-                // Show snooze options dialog
-                _showSnoozeDialog(context);
-              },
-            ),
-        ],
-      );
     }
+    
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        ElevatedButton.icon(
+          icon: const Icon(Icons.check_circle),
+          label: const Text('Mark Done'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.green,
+            foregroundColor: Colors.white,
+          ),
+          onPressed: () {
+            taskProvider.completeTask(_task!.id).then((_) {
+              Navigator.pop(context);
+            });
+          },
+        ),
+        if (_task!.status != TaskStatus.snoozed)
+          ElevatedButton.icon(
+            icon: const Icon(Icons.snooze),
+            label: const Text('Snooze'),
+            onPressed: () => _showSnoozeDialog(context),
+          ),
+      ],
+    );
   }
   
   // Show delete confirmation dialog

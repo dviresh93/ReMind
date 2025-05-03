@@ -36,8 +36,9 @@ class NotificationService {
       // Check if we can request runtime permissions (Android 13+)
       final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
       final androidImplementation = flutterLocalNotificationsPlugin
-          .resolvePlatformSpecificImplementation
-              AndroidFlutterLocalNotificationsPlugin>();
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>();
+
               
       if (androidImplementation != null) {
         final arePermissionsGranted = await androidImplementation.arePermissionsGranted();
@@ -82,12 +83,14 @@ class NotificationService {
       onDidReceiveNotificationResponse: _onNotificationTapped,
     );
     
+    // Set up notification channels
+    await _setupNotificationChannels();
+    
     // Request permissions
     final hasPermission = await requestNotificationPermissions();
     
     if (!hasPermission) {
       print('Notification permissions not granted');
-      // Store this state so the app can show appropriate UI
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('notification_permission_granted', false);
     } else {
@@ -96,6 +99,10 @@ class NotificationService {
     }
     
     _isInitialized = true;
+  }
+
+  void _onNotificationTapped(NotificationResponse response) {
+    _selectNotificationSubject.add(response.payload);
   }
   
   // Define notification channels
@@ -207,5 +214,27 @@ class NotificationService {
   // Dispose resources
   void dispose() {
     _selectNotificationSubject.close();
+  }
+
+  Future<void> showServiceStatusNotification(String title, String body) async {
+    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      'remind_service_channel',
+      'Service Status',
+      channelDescription: 'Notifications about service status',
+      importance: Importance.high,
+      priority: Priority.high,
+    );
+    
+    const NotificationDetails details = NotificationDetails(
+      android: androidDetails,
+      iOS: DarwinNotificationDetails(),
+    );
+    
+    await _flutterLocalNotificationsPlugin.show(
+      0, // Using ID 0 for service notifications
+      title,
+      body,
+      details,
+    );
   }
 }
