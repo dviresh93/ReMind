@@ -115,32 +115,37 @@ class LocationService {
   
   // Function to run in the isolate
   static void _isolateFunction(SendPort sendPort) async {
-    // Create a receiver port for bidirectional communication
     final receivePort = ReceivePort();
     sendPort.send(receivePort.sendPort);
     
-    // Wait for start signal
     await for (var message in receivePort) {
       if (message == 'start') {
         break;
       }
     }
     
-    // Get the registered port
     final mainSendPort = IsolateNameServer.lookupPortByName(_portName);
     if (mainSendPort == null) {
       Isolate.exit();
     }
     
-    // Start location tracking
-    await Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 10, // Update every 10 meters
-      ),
-    ).listen((Position position) {
-      mainSendPort?.send(position);
-    });
+    try {
+      await Geolocator.getPositionStream(
+        locationSettings: _locationSettings,
+      ).listen(
+        (Position position) {
+          mainSendPort?.send(position);
+        },
+        onError: (error) {
+          print('Error in location stream: $error');
+          // Attempt to restart the stream on error
+          _isolateFunction(sendPort);
+        },
+      );
+    } catch (e) {
+      print('Fatal error in location stream: $e');
+      Isolate.exit();
+    }
   }
 
   // Check if a task is nearby the current location
@@ -165,9 +170,20 @@ class LocationService {
   }
   
   // Dispose resources
+  void _cleanupResources() {
+    _receivePort?.close();
+    _isolate?.kill();
+    _isolate = null;
+    _receivePort = null;
+    IsolateNameServer.removePortNameMapping(_portName);
+    _locationStreamController.close();
+    _isInitialized = false;
+  }
+
+  @override
   void dispose() {
     _cleanupResources();
-    _locationStreamController.close();
+    super.dispose();
   }
 
   // Add this method to periodically check permissions
@@ -195,13 +211,5 @@ class LocationService {
     } catch (e) {
       print('Error verifying location permissions: $e');
     }
-  }
-
-  void _cleanupResources() {
-    _receivePort?.close();
-    _receivePort = null;
-    _isolate?.kill();
-    _isolate = null;
-    IsolateNameServer.removePortNameMapping(_portName);
   }
 }

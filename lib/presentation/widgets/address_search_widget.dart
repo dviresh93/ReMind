@@ -111,7 +111,7 @@ class _AddressSearchWidgetState extends State<AddressSearchWidget> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   subtitle: Text(
-                    result['name'],
+                    '${result['lat'].toStringAsFixed(4)}, ${result['lon'].toStringAsFixed(4)}',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),

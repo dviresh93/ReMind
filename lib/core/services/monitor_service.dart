@@ -101,34 +101,72 @@ class MonitorService {
   static void _onStart(ServiceInstance service) async {
     DartPluginRegistrant.ensureInitialized();
     
-    // For Android, set as foreground service
-    if (service is AndroidServiceInstance) {
-      service.setAsForegroundService();
-    }
+    LocationService? locationService;
+    NotificationService? notificationService;
+    TaskRepository? taskRepository;
+    Timer? periodicTimer;
     
-    // Initialize dependencies within the service
-    final locationService = LocationService();
-    await locationService.initialize();
-    
-    final notificationService = NotificationService();
-    await notificationService.initialize();
-    
-    final taskRepository = await LocalTaskRepository.create();
-    
-    // Set up location listener
-    locationService.locationStream.listen((position) async {
-      await _checkNearbyTasks(position, taskRepository, notificationService);
-    });
-    
-    // Periodic check for snoozed tasks that need to be reactivated
-    Timer.periodic(const Duration(minutes: 5), (_) async {
-      await _checkSnoozedTasks(taskRepository);
-    });
-    
-    // Keep the service alive
-    service.on('stopService').listen((event) {
+    try {
+      // For Android, set as foreground service
+      if (service is AndroidServiceInstance) {
+        service.setAsForegroundService();
+      }
+      
+      // Initialize dependencies with error handling
+      locationService = LocationService();
+      await locationService.initialize();
+      
+      notificationService = NotificationService();
+      await notificationService.initialize();
+      
+      taskRepository = await LocalTaskRepository.create();
+      
+      // Set up location listener with error handling
+      locationService.locationStream.listen(
+        (position) async {
+          try {
+            await _checkNearbyTasks(position, taskRepository!, notificationService!);
+          } catch (e) {
+            print('Error checking nearby tasks: $e');
+          }
+        },
+        onError: (error) {
+          print('Error in location stream: $error');
+        },
+      );
+      
+      // Periodic check for snoozed tasks
+      periodicTimer = Timer.periodic(const Duration(minutes: 5), (_) async {
+        try {
+          await _checkSnoozedTasks(taskRepository!);
+        } catch (e) {
+          print('Error checking snoozed tasks: $e');
+        }
+      });
+      
+      // Keep the service alive and handle cleanup
+      service.on('stopService').listen((event) async {
+        periodicTimer?.cancel();
+        locationService?.dispose();
+        notificationService?.dispose();
+        service.stopSelf();
+      });
+      
+    } catch (e) {
+      print('Fatal error in background service: $e');
+      // Clean up resources on error
+      periodicTimer?.cancel();
+      locationService?.dispose();
+      notificationService?.dispose();
+      
+      // Notify user of service failure
+      notificationService?.showServiceStatusNotification(
+        'Service Error',
+        'Background service encountered an error. Please restart the app.',
+      );
+      
       service.stopSelf();
-    });
+    }
   }
   
   // Check for nearby tasks

@@ -559,4 +559,43 @@ class _EditTaskScreenState extends State<EditTaskScreen> {
       });
     }
   }
+
+  void _updateLocation(LatLng point) {
+    setState(() {
+      _location = point;
+      _mapController.move(point, _mapController.zoom);
+    });
+    
+    // Update location name based on new coordinates
+    _updateLocationName(point);
+  }
+
+  Future<void> _updateLocationName(LatLng point) async {
+    setState(() {
+      _isLoading = true;
+    });
+    
+    try {
+      final locationHelper = LocationHelper();
+      final address = await locationHelper.getAddressFromLatLng(point);
+      
+      setState(() {
+        _locationNameController.text = address;
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Error updating location name: $e');
+      setState(() {
+        _isLoading = false;
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to get address for selected location'),
+          ),
+        );
+      }
+    }
+  }
 }
