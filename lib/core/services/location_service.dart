@@ -37,6 +37,13 @@ class LocationService {
   // Add this property to track initialization status
   bool _isInitialized = false;
   
+  // Update the location settings
+  static const LocationSettings _locationSettings = LocationSettings(
+    accuracy: LocationAccuracy.balanced,  // Changed from high to balanced
+    distanceFilter: 50,  // Changed from 10m to 50m
+    timeLimit: Duration(minutes: 5),  // Add time limit to prevent continuous updates
+  );
+  
   // Initialize the location service
   Future<void> initialize() async {
     if (_isInitialized) return;
@@ -78,32 +85,32 @@ class LocationService {
 
   // Start tracking location in the background
   Future<void> _startLocationTracking() async {
-    // Create a port for communication
-    _receivePort = ReceivePort();
-    IsolateNameServer.registerPortWithName(
-      _receivePort!.sendPort, 
-      _portName,
-    );
-    
-    // Set up the receiver
-    _receivePort!.listen((dynamic data) {
-      if (data is Position) {
-        _locationStreamController.add(data);
-      }
-    });
-    
-    // Start the isolate
-    _isolate = await Isolate.spawn(
-      _isolateFunction,
-      _receivePort!.sendPort,
-    );
-    
-    // Register exit callback
-    _receivePort!.listen((message) {
-      if (message is SendPort) {
-        message.send('start');
-      }
-    });
+    try {
+      _receivePort?.close();  // Close existing port if any
+      _isolate?.kill();       // Kill existing isolate if any
+      
+      _receivePort = ReceivePort();
+      IsolateNameServer.removePortNameMapping(_portName);  // Clean up old mapping
+      IsolateNameServer.registerPortWithName(
+        _receivePort!.sendPort, 
+        _portName,
+      );
+      
+      _receivePort!.listen(_handleIsolateMessage);
+      
+      _isolate = await Isolate.spawn(
+        _isolateFunction,
+        _receivePort!.sendPort,
+      ).catchError((error) {
+        print('Error spawning isolate: $error');
+        _cleanupResources();
+        throw Exception('Failed to start location tracking');
+      });
+    } catch (e) {
+      print('Error in _startLocationTracking: $e');
+      _cleanupResources();
+      rethrow;
+    }
   }
   
   // Function to run in the isolate
@@ -158,19 +165,9 @@ class LocationService {
   }
   
   // Dispose resources
-  void dispose() async {
-    // Cancel the isolate
-    _isolate?.kill(priority: Isolate.immediate);
-    _isolate = null;
-    
-    // Unregister the port
-    IsolateNameServer.removePortNameMapping(_portName);
-    
-    // Close the stream controller
-    await _locationStreamController.close();
-    
-    // Close the receive port
-    _receivePort?.close();
+  void dispose() {
+    _cleanupResources();
+    _locationStreamController.close();
   }
 
   // Add this method to periodically check permissions
@@ -198,5 +195,13 @@ class LocationService {
     } catch (e) {
       print('Error verifying location permissions: $e');
     }
+  }
+
+  void _cleanupResources() {
+    _receivePort?.close();
+    _receivePort = null;
+    _isolate?.kill();
+    _isolate = null;
+    IsolateNameServer.removePortNameMapping(_portName);
   }
 }

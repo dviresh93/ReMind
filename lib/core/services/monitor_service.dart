@@ -39,6 +39,12 @@ class MonitorService {
   Timer? _recoveryTimer;
   static const _recoveryInterval = Duration(minutes: 5);
   
+  // Add new fields for recovery
+  static const _maxRecoveryAttempts = 3;
+  static const _recoveryBackoff = Duration(minutes: 1);
+  int _recoveryAttempts = 0;
+  DateTime? _lastRecoveryAttempt;
+  
   // Initialize the service
   Future<void> initialize() async {
     if (_isInitialized) return;
@@ -232,33 +238,65 @@ class MonitorService {
   Future<void> _startRecoveryMechanism() async {
     _recoveryTimer?.cancel();
     _recoveryTimer = Timer.periodic(_recoveryInterval, (_) async {
-      try {
-        final isRunning = await _backgroundService.isRunning();
-        if (!isRunning) {
-          print('Background service not running, attempting to restart...');
+      await _attemptServiceRecovery();
+    });
+  }
+
+  Future<void> _attemptServiceRecovery() async {
+    try {
+      final isRunning = await _backgroundService.isRunning();
+      if (!isRunning) {
+        // Check if we should attempt recovery
+        if (_canAttemptRecovery()) {
+          print('Background service not running, attempting recovery...');
+          _recoveryAttempts++;
+          _lastRecoveryAttempt = DateTime.now();
+          
           await startService();
           
           // Verify service is running
           final isNowRunning = await _backgroundService.isRunning();
           if (!isNowRunning) {
-            // If still not running, show notification
-            await _notificationService.showServiceStatusNotification(
-              'Service Restart Required',
-              'The background service needs to be restarted to continue monitoring tasks.',
-            );
+            await _handleRecoveryFailure();
+          } else {
+            // Reset recovery counters on success
+            _recoveryAttempts = 0;
+            _lastRecoveryAttempt = null;
           }
+        } else {
+          await _handleRecoveryFailure();
         }
-      } catch (e) {
-        print('Error in recovery mechanism: $e');
       }
-    });
+    } catch (e) {
+      print('Error in recovery mechanism: $e');
+      await _handleRecoveryFailure();
+    }
+  }
+
+  bool _canAttemptRecovery() {
+    if (_recoveryAttempts >= _maxRecoveryAttempts) return false;
+    if (_lastRecoveryAttempt != null) {
+      final timeSinceLastAttempt = DateTime.now().difference(_lastRecoveryAttempt!);
+      return timeSinceLastAttempt > _recoveryBackoff;
+    }
+    return true;
+  }
+
+  Future<void> _handleRecoveryFailure() async {
+    await _notificationService.showServiceStatusNotification(
+      'Service Recovery Failed',
+      'Please open the app to restart the monitoring service.',
+    );
   }
 
   // Update dispose method
   @override
   void dispose() {
     _recoveryTimer?.cancel();
-    _backgroundService.stopService();
-    super.dispose();
+    _recoveryTimer = null;
+    _backgroundService.invoke('stopService');
+    _locationService.dispose();
+    _notificationService.dispose();
+    _isInitialized = false;
   }
 }
