@@ -1,0 +1,22 @@
+# This is a generated file; do not edit or check into version control.
+flutter_background_service=/home/virus/.pub-cache/hosted/pub.dev/flutter_background_service-5.1.0/
+flutter_background_service_android=/home/virus/.pub-cache/hosted/pub.dev/flutter_background_service_android-6.3.0/
+flutter_background_service_ios=/home/virus/.pub-cache/hosted/pub.dev/flutter_background_service_ios-5.0.3/
+flutter_local_notifications=/home/virus/.pub-cache/hosted/pub.dev/flutter_local_notifications-16.3.3/
+flutter_local_notifications_linux=/home/virus/.pub-cache/hosted/pub.dev/flutter_local_notifications_linux-4.0.1/
+geolocator=/home/virus/.pub-cache/hosted/pub.dev/geolocator-10.1.1/
+geolocator_android=/home/virus/.pub-cache/hosted/pub.dev/geolocator_android-4.6.1/
+geolocator_apple=/home/virus/.pub-cache/hosted/pub.dev/geolocator_apple-2.3.9/
+geolocator_web=/home/virus/.pub-cache/hosted/pub.dev/geolocator_web-2.2.1/
+geolocator_windows=/home/virus/.pub-cache/hosted/pub.dev/geolocator_windows-0.2.3/
+path_provider=/home/virus/.pub-cache/hosted/pub.dev/path_provider-2.1.4/
+path_provider_android=/home/virus/.pub-cache/hosted/pub.dev/path_provider_android-2.2.4/
+path_provider_foundation=/home/virus/.pub-cache/hosted/pub.dev/path_provider_foundation-2.3.2/
+path_provider_linux=/home/virus/.pub-cache/hosted/pub.dev/path_provider_linux-2.2.1/
+path_provider_windows=/home/virus/.pub-cache/hosted/pub.dev/path_provider_windows-2.3.0/
+shared_preferences=/home/virus/.pub-cache/hosted/pub.dev/shared_preferences-2.2.3/
+shared_preferences_android=/home/virus/.pub-cache/hosted/pub.dev/shared_preferences_android-2.2.2/
+shared_preferences_foundation=/home/virus/.pub-cache/hosted/pub.dev/shared_preferences_foundation-2.3.5/
+shared_preferences_linux=/home/virus/.pub-cache/hosted/pub.dev/shared_preferences_linux-2.4.0/
+shared_preferences_web=/home/virus/.pub-cache/hosted/pub.dev/shared_preferences_web-2.2.2/
+shared_preferences_windows=/home/virus/.pub-cache/hosted/pub.dev/shared_preferences_windows-2.4.0/

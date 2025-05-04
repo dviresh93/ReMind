@@ -8,6 +8,19 @@ import '../../domain/entities/task.dart';
 import '../../domain/repositories/task_repository.dart';
 import '../../core/services/monitor_service.dart';
 
+class _AppLifecycleObserver extends WidgetsBindingObserver {
+  final Function onResume;
+  
+  _AppLifecycleObserver({required this.onResume});
+  
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      onResume();
+    }
+  }
+}
+
 class TaskProvider with ChangeNotifier {
   final TaskRepository _taskRepository;
   final MonitorService _monitorService;
@@ -49,20 +62,6 @@ class TaskProvider with ChangeNotifier {
       onResume: () => refreshTasks(),
     );
     WidgetsBinding.instance.addObserver(_lifecycleObserver);
-  }
-  
-  // Add this class to listen for lifecycle changes
-  class _AppLifecycleObserver extends WidgetsBindingObserver {
-    final VoidCallback onResume;
-    
-    _AppLifecycleObserver({required this.onResume});
-    
-    @override
-    void didChangeAppLifecycleState(AppLifecycleState state) {
-      if (state == AppLifecycleState.resumed) {
-        onResume();
-      }
-    }
   }
   
   // Don't forget to dispose in the provider

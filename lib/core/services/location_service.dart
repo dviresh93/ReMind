@@ -21,8 +21,8 @@ class LocationService {
   LocationService._internal();
 
   // Streams and controllers
-  final _locationStreamController = StreamController<Position>.broadcast();
-  Stream<Position> get locationStream => _locationStreamController.stream;
+  StreamController<Position>? _locationStreamController;
+  Stream<Position> get locationStream => _locationStreamController?.stream ?? Stream.empty();
   
   // Background isolate and port
   Isolate? _isolate;
@@ -39,48 +39,62 @@ class LocationService {
   
   // Update the location settings
   static const LocationSettings _locationSettings = LocationSettings(
-    accuracy: LocationAccuracy.balanced,  // Changed from high to balanced
+    accuracy: LocationAccuracy.high,  // Changed from balanced to high
     distanceFilter: 50,  // Changed from 10m to 50m
     timeLimit: Duration(minutes: 5),  // Add time limit to prevent continuous updates
   );
+  
+  // Add this property to prevent concurrent initialization
+  bool _initializing = false;
   
   // Initialize the location service
   Future<void> initialize() async {
     if (_isInitialized) return;
     
-    // Initialize dependencies
-    _notificationService = NotificationService();
-    await _notificationService.initialize();
+    // Prevent concurrent initialization
+    if (_initializing) return;
+    _initializing = true;
     
-    // Start periodic permission checks
-    Timer.periodic(const Duration(minutes: 15), (_) {
-      verifyLocationPermissions();
-    });
-    
-    // Check if location services are enabled
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      return Future.error('Location services are disabled.');
-    }
-
-    // Check location permissions
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
-        return Future.error('Location permissions are denied');
+    try {
+      // Create a stream controller if not exists or was closed
+      _locationStreamController ??= StreamController<Position>.broadcast();
+      
+      // Initialize dependencies
+      _notificationService = NotificationService();
+      await _notificationService.initialize();
+      
+      // Start periodic permission checks
+      Timer.periodic(const Duration(minutes: 15), (_) {
+        verifyLocationPermissions();
+      });
+      
+      // Check if location services are enabled
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        return Future.error('Location services are disabled.');
       }
+
+      // Check location permissions
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          return Future.error('Location permissions are denied');
+        }
+      }
+      
+      if (permission == LocationPermission.deniedForever) {
+        return Future.error(
+            'Location permissions are permanently denied, we cannot request permissions.');
+      }
+      
+      // Start location tracking
+      await _startLocationTracking();
+      
+      _isInitialized = true;
+    } finally {
+      _initializing = false;
     }
-    
-    if (permission == LocationPermission.deniedForever) {
-      return Future.error(
-          'Location permissions are permanently denied, we cannot request permissions.');
-    }
-    
-    // Start location tracking
-    await _startLocationTracking();
-    
-    _isInitialized = true;
   }
 
   // Start tracking location in the background
@@ -96,6 +110,7 @@ class LocationService {
         _portName,
       );
       
+      // Implement the missing message handler
       _receivePort!.listen(_handleIsolateMessage);
       
       _isolate = await Isolate.spawn(
@@ -106,6 +121,10 @@ class LocationService {
         _cleanupResources();
         throw Exception('Failed to start location tracking');
       });
+      
+      // Send start signal to isolate
+      final sendPort = IsolateNameServer.lookupPortByName(_portName);
+      sendPort?.send('start');
     } catch (e) {
       print('Error in _startLocationTracking: $e');
       _cleanupResources();
@@ -113,38 +132,69 @@ class LocationService {
     }
   }
   
+  // Add the missing method to handle messages from the isolate
+  SendPort? _isolateSendPort;
+  
+  void _handleIsolateMessage(dynamic message) {
+    if (message is SendPort) {
+      _isolateSendPort = message;
+      _isolateSendPort?.send('start');
+    } else if (message is Position) {
+      _locationStreamController?.add(message);
+    }
+  }
+  
   // Function to run in the isolate
   static void _isolateFunction(SendPort sendPort) async {
+    // Create a ReceivePort for incoming messages
     final receivePort = ReceivePort();
+    
+    // Send the SendPort to the main isolate
     sendPort.send(receivePort.sendPort);
     
-    await for (var message in receivePort) {
-      if (message == 'start') {
-        break;
-      }
-    }
+    // Variable to track if we started listening to position updates
+    bool isTrackingPosition = false;
     
+    // We only want to listen to the ReceivePort once
+    StreamSubscription? portSubscription;
+    portSubscription = receivePort.listen((message) {
+      if (message == 'start' && !isTrackingPosition) {
+        isTrackingPosition = true;
+        _startPositionTracking();
+      } else if (message == 'stop') {
+        portSubscription?.cancel();
+        Isolate.exit();
+      }
+    });
+  }
+
+  // Separate method to start position tracking
+  static void _startPositionTracking() {
     final mainSendPort = IsolateNameServer.lookupPortByName(_portName);
     if (mainSendPort == null) {
-      Isolate.exit();
+      print('Error: Unable to find main isolate port');
+      return;
     }
     
     try {
-      await Geolocator.getPositionStream(
+      Geolocator.getPositionStream(
         locationSettings: _locationSettings,
       ).listen(
-        (Position position) {
-          mainSendPort?.send(position);
+        (position) {
+          mainSendPort.send(position);
         },
         onError: (error) {
           print('Error in location stream: $error');
-          // Attempt to restart the stream on error
-          _isolateFunction(sendPort);
+          // Wait and retry
+          Future.delayed(Duration(seconds: 5), () {
+            if (IsolateNameServer.lookupPortByName(_portName) != null) {
+              _startPositionTracking();
+            }
+          });
         },
       );
     } catch (e) {
-      print('Fatal error in location stream: $e');
-      Isolate.exit();
+      print('Fatal error starting position stream: $e');
     }
   }
 
@@ -171,19 +221,25 @@ class LocationService {
   
   // Dispose resources
   void _cleanupResources() {
+    // Send stop message to isolate if it exists
+    final sendPort = IsolateNameServer.lookupPortByName(_portName);
+    sendPort?.send('stop');
+    
     _receivePort?.close();
     _isolate?.kill();
     _isolate = null;
     _receivePort = null;
     IsolateNameServer.removePortNameMapping(_portName);
-    _locationStreamController.close();
+    
+    // Close the stream controller
+    _locationStreamController?.close();
+    _locationStreamController = null;
     _isInitialized = false;
   }
 
-  @override
+  // Fixed dispose method (removed invalid super.dispose())
   void dispose() {
     _cleanupResources();
-    super.dispose();
   }
 
   // Add this method to periodically check permissions
@@ -191,7 +247,6 @@ class LocationService {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        // Notify about disabled location services
         _notificationService.showServiceStatusNotification(
           'Location services disabled',
           'Please enable location services for ReMind to work properly'
@@ -200,13 +255,21 @@ class LocationService {
       }
 
       LocationPermission permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied || 
-          permission == LocationPermission.deniedForever) {
-        // Permissions have been revoked, update app state
-        _notificationService.showServiceStatusNotification(
-          'Location permission required',
-          'ReMind needs location permission to remind you about nearby tasks'
-        );
+      if (permission == LocationPermission.denied) {
+        // Automatically try to request permission again
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          _notificationService.showServiceStatusNotification(
+            'Location permission required',
+            'ReMind needs location permission to remind you about nearby tasks'
+          );
+        } else if (permission == LocationPermission.always ||
+                  permission == LocationPermission.whileInUse) {
+          // Permission granted, restart tracking if needed
+          if (!_isInitialized) {
+            await initialize();
+          }
+        }
       }
     } catch (e) {
       print('Error verifying location permissions: $e');

@@ -26,33 +26,39 @@ class NotificationService {
   bool _isInitialized = false;
 
   Future<bool> requestNotificationPermissions() async {
-    // For iOS, permissions are requested during initialization
-    if (Platform.isIOS) {
-      return true; // Permissions handled by DarwinInitializationSettings
-    }
-    
-    // For Android 13+ (API level 33+)
-    if (Platform.isAndroid) {
-      // Check if we can request runtime permissions (Android 13+)
-      final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
-      final androidImplementation = flutterLocalNotificationsPlugin
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>();
-
-              
-      if (androidImplementation != null) {
-        final arePermissionsGranted = await androidImplementation.arePermissionsGranted();
-        
-        if (!arePermissionsGranted) {
-          final permissionGranted = await androidImplementation.requestPermission();
-          return permissionGranted ?? false;
-        }
-        
-        return true;
+    try {
+      // For iOS, permissions are requested during initialization
+      if (Platform.isIOS) {
+        return true; // Permissions handled by DarwinInitializationSettings
       }
+      
+      // For Android 13+ (API level 33+)
+      if (Platform.isAndroid) {
+        // Check if we can request runtime permissions (Android 13+)
+        final flutterLocalNotificationsPlugin = FlutterLocalNotificationsPlugin();
+        final androidImplementation = flutterLocalNotificationsPlugin
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+
+                
+        if (androidImplementation != null) {
+          try {
+            final permissionGranted = await androidImplementation.requestNotificationsPermission();
+            return permissionGranted ?? false;
+          } catch (e) {
+            print('Error requesting notification permissions: $e');
+            // Fallback for older plugin versions or when in background
+            return true; 
+          }
+        }
+      }
+      
+      return false;
+    } catch (e) {
+      print('Exception in requestNotificationPermissions: $e');
+      // In case of error, default to true to prevent crashes
+      return true;
     }
-    
-    return false;
   }
 
   Future<void> initialize() async {
@@ -154,51 +160,56 @@ class NotificationService {
   
   // Create a notification with action buttons
   Future<void> showTaskActionNotification(Task task) async {
-    // For Android, define action buttons
-    final List<AndroidNotificationAction> androidActions = [
-      const AndroidNotificationAction(
-        'done_action',
-        'Mark as Done',
-        showsUserInterface: true,
-      ),
-      const AndroidNotificationAction(
-        'snooze_action',
-        'Remind Me Later',
-        showsUserInterface: true,
-      ),
-    ];
-    
-    final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
-      'remind_task_channel',
-      'Task Reminders',
-      channelDescription: 'Notifications for nearby tasks',
-      importance: Importance.high,
-      priority: Priority.high,
-      showWhen: true,
-      actions: androidActions,
-    );
-    
-    // For iOS, we'll handle actions differently since the API is different
-    const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
-      presentAlert: true,
-      presentBadge: true,
-      presentSound: true,
-      interruptionLevel: InterruptionLevel.active,
-    );
-    
-    final NotificationDetails details = NotificationDetails(
-      android: androidDetails,
-      iOS: iosDetails,
-    );
-    
-    // Show the notification
-    await _flutterLocalNotificationsPlugin.show(
-      task.id.hashCode,
-      'ReMind: ${task.name}',
-      'You\'re near ${task.locationName}. ${task.description}',
-      details,
-      payload: task.id,
-    );
+    try {
+      // For Android, define action buttons
+      final List<AndroidNotificationAction> androidActions = [
+        const AndroidNotificationAction(
+          'done_action',
+          'Mark as Done',
+          showsUserInterface: true,
+        ),
+        const AndroidNotificationAction(
+          'snooze_action',
+          'Remind Me Later',
+          showsUserInterface: true,
+        ),
+      ];
+      
+      final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+        'remind_task_channel',
+        'Task Reminders',
+        channelDescription: 'Notifications for nearby tasks',
+        importance: Importance.high,
+        priority: Priority.high,
+        showWhen: true,
+        actions: androidActions,
+      );
+      
+      // For iOS, we'll handle actions differently since the API is different
+      const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+        interruptionLevel: InterruptionLevel.active,
+      );
+      
+      final NotificationDetails details = NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+      );
+      
+      // Show the notification
+      await _flutterLocalNotificationsPlugin.show(
+        task.id.hashCode,
+        'ReMind: ${task.name}',
+        'You\'re near ${task.locationName}. ${task.description}',
+        details,
+        payload: task.id,
+      );
+    } catch (e) {
+      print('Error showing notification: $e');
+      // Continue without showing the notification
+    }
   }
   
   // Cancel a specific notification

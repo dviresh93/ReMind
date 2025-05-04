@@ -1,0 +1,1 @@
+ /home/virus/Documents/repo/ReMind/.dart_tool/flutter_build/00ac3b319b9c2ddf7515516a12f5af01/native_assets.yaml: 
